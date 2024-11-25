@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Sdk Name="Aspire.AppHost.Sdk" Version="9.0.0" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAspireHost>true</IsAspireHost>
+    <UserSecretsId>9831ae96-d493-4eda-8d1d-7989b3b9450f</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AsyncApiDemo.BackendApi\AsyncApiDemo.BackendApi.csproj" />
+    <ProjectReference Include="..\AsyncApiDemo.GatewayApi\AsyncApiDemo.GatewayApi.csproj" />
+    <ProjectReference Include="..\AsyncApiDemo.OrderSender\AsyncApiDemo.OrderSender.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>
