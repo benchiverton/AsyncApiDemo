@@ -13,8 +13,8 @@ public class SubmitOrderRequestHandler : IHandleMessages<SubmitOrderRequest>
 
     public async Task Handle(SubmitOrderRequest message, IMessageHandlerContext context)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, "https://localhost:7354/sendorder/" + message.OrderNumber);
-        var response = await _httpClient.SendAsync(request, context.CancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://localhost:7354/sendorder/" + message.OrderNumber);
+        using var response = await _httpClient.SendAsync(request, context.CancellationToken);
         response.EnsureSuccessStatusCode();
     }
 }

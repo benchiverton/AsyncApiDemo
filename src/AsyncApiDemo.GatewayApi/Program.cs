@@ -36,8 +36,6 @@ if (app.Environment.IsDevelopment())
 
 app.MapPost("/submitordersync/{orderNumber:int}", async (int orderNumber, IMemoryCache cache, HttpClient httpClient) =>
     {
-        app.Logger.LogInformation("Submitting order {orderNumber}...", orderNumber);
-        
         // validate
         var key = $"SYNC_{orderNumber}";
         var exists = cache.Get<string>(key);
@@ -48,21 +46,18 @@ app.MapPost("/submitordersync/{orderNumber:int}", async (int orderNumber, IMemor
         }
 
         // send
-        var request = new HttpRequestMessage(HttpMethod.Post, "https://localhost:7354/sendorder/" + orderNumber);
-        var response = await httpClient.SendAsync(request);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://localhost:7354/sendorder/" + orderNumber);
+        using var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
-        var orderId = Guid.Parse(await response.Content.ReadAsStringAsync());
         cache.Set(key, orderNumber.ToString());
-        app.Logger.LogInformation("Order {orderNumber} submitted. Backend id: {orderId}", orderNumber, orderId);
+        app.Logger.LogInformation("Order {orderNumber} submitted.", orderNumber);
 
-        return Results.Ok(orderId);
+        return Results.Ok();
     })
     .WithName("SubmitOrderSync");
 
 app.MapPost("/submitorderasync/{orderNumber:int}", async (int orderNumber, IMemoryCache cache, IMessageSession messageSession) =>
     {
-        app.Logger.LogInformation("Submitting order {orderNumber}...", orderNumber);
-        
         // validate
         var key = $"ASYNC_{orderNumber}";
         var exists = cache.Get<string>(key);
@@ -75,7 +70,7 @@ app.MapPost("/submitorderasync/{orderNumber:int}", async (int orderNumber, IMemo
         // enqueue
         await messageSession.SendLocal(new SubmitOrderRequest(orderNumber));
         cache.Set(key, orderNumber.ToString());
-        app.Logger.LogInformation("Order {orderNumber} enqueued. Backend id unknown.", orderNumber);
+        app.Logger.LogInformation("Order {orderNumber} enqueued.", orderNumber);
 
         return Results.Accepted();
     })

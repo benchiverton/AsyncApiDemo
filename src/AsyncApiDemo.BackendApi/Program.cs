@@ -23,13 +23,10 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.MapPost("/sendorder/{orderNumber:int}", (int orderNumber, OrderCounter orderCounter) =>
+app.MapPost("/sendorder/{orderNumber:int}", async (int orderNumber, OrderCounter orderCounter) =>
     {
-        app.Logger.LogInformation("Sending order {orderNumber}...", orderNumber);
         var orderId = Guid.CreateVersion7();
-        Task.Delay(1000); // do something
-        app.Logger.LogInformation("Order {orderNumber} sent. Unique id: {orderId}", orderNumber, orderId);
-
+        await Task.Delay(200); // do something
         orderCounter.Increment();
         
         return Results.Ok(orderId);
