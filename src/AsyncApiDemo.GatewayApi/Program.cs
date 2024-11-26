@@ -1,5 +1,6 @@
 using AsyncApiDemo.GatewayApi;
 using AsyncApiDemo.ServiceDefaults;
+using MassTransit;
 using Microsoft.Extensions.Caching.Memory;
 
 
@@ -14,11 +15,18 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 
 // Configure messaging
-var endpointConfiguration = new EndpointConfiguration("AsyncApiDemo");
-endpointConfiguration.UseSerialization<SystemJsonSerializer>();
-endpointConfiguration.EnableInstallers();
-endpointConfiguration.UseTransport<LearningTransport>();
-builder.UseNServiceBus(endpointConfiguration);
+builder.Services.AddMassTransit(x =>
+{
+    x.AddConsumer<SubmitOrderRequestConsumer>();
+    
+    x.UsingInMemory((context, cfg) =>
+    {
+        cfg.ReceiveEndpoint("gateway-api", e =>
+        {
+            e.ConfigureConsumer<SubmitOrderRequestConsumer>(context);
+        });
+    });
+});
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -56,7 +64,7 @@ app.MapPost("/submitordersync/{orderNumber:int}", async (int orderNumber, IMemor
     })
     .WithName("SubmitOrderSync");
 
-app.MapPost("/submitorderasync/{orderNumber:int}", async (int orderNumber, IMemoryCache cache, IMessageSession messageSession) =>
+app.MapPost("/submitorderasync/{orderNumber:int}", async (int orderNumber, IMemoryCache cache, ISendEndpointProvider sendEndpointProvider) =>
     {
         // validate
         var key = $"ASYNC_{orderNumber}";
@@ -68,7 +76,8 @@ app.MapPost("/submitorderasync/{orderNumber:int}", async (int orderNumber, IMemo
         }
 
         // enqueue
-        await messageSession.SendLocal(new SubmitOrderRequest(orderNumber));
+        var endpoint = await sendEndpointProvider.GetSendEndpoint(new Uri("queue:gateway-api"));
+        await endpoint.Send(new SubmitOrderRequest(orderNumber));
         cache.Set(key, orderNumber.ToString());
         app.Logger.LogInformation("Order {orderNumber} enqueued.", orderNumber);
 

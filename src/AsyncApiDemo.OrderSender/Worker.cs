@@ -19,42 +19,32 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Running tests...");
-        var syncResults_10 = await RunTests(SyncEndpoint, 10, 3);
-        var asyncResults_10 = await RunTests(AsyncEndpoint, 10, 3);
-        var syncResults_50 = await RunTests(SyncEndpoint, 50, 3);
-        var asyncResults_50 = await RunTests(AsyncEndpoint, 50, 3);
-        var syncResults_100 = await RunTests(SyncEndpoint, 100, 3);
-        var asyncResults_100 = await RunTests(AsyncEndpoint, 100, 3);
-        var syncResults_200 = await RunTests(SyncEndpoint, 200, 3);
-        var asyncResults_200 = await RunTests(AsyncEndpoint, 200, 3);
-        var syncResults_500 = await RunTests(SyncEndpoint, 500, 3);
-        var asyncResults_500 = await RunTests(AsyncEndpoint, 500, 3);
-        var syncResults_1000 = await RunTests(SyncEndpoint, 1000, 3);
-        var asyncResults_1000 = await RunTests(AsyncEndpoint, 1000, 3);
-
         List<Result> results =
         [
-            syncResults_10,
-            asyncResults_10,
-            syncResults_50,
-            asyncResults_50,
-            syncResults_100,
-            asyncResults_100,
-            syncResults_200,
-            asyncResults_200,
-            syncResults_500,
-            asyncResults_500,
-            syncResults_1000,
-            asyncResults_1000
+            await RunTests(SyncEndpoint, 10, 3),
+            await RunTests(AsyncEndpoint, 10, 3),
+            await RunTests(SyncEndpoint, 50, 3),
+            await RunTests(AsyncEndpoint, 50, 3),
+            await RunTests(SyncEndpoint, 100, 3),
+            await RunTests(AsyncEndpoint, 100, 3),
+            await RunTests(SyncEndpoint, 200, 3),
+            await RunTests(AsyncEndpoint, 200, 3),
+            await RunTests(SyncEndpoint, 500, 3),
+            await RunTests(AsyncEndpoint, 500, 3),
+            await RunTests(SyncEndpoint, 1000, 3),
+            await RunTests(AsyncEndpoint, 1000, 3),
+            await RunTests(SyncEndpoint, 2000, 3),
+            await RunTests(AsyncEndpoint, 2000, 3),
+            await RunTests(SyncEndpoint, 5000, 3),
+            await RunTests(AsyncEndpoint, 5000, 3)
         ];
+        
         var resultsLog = new StringBuilder();
-        resultsLog.AppendLine("| Endpoint             | Reqs       | Sent (ms)            | Processed (ms)       |");
+        resultsLog.AppendLine($"| {"Endpoint",-20} | {"Requests",-10} | {"Average latency (ms)",-20} | {"Throughput (/min)",-20} | {"Average failures",-20} |");
         foreach (var result in results)
         {
             resultsLog.AppendLine(result.ToString());
         }
-
         _logger.LogInformation(resultsLog.ToString());
     }
 
@@ -69,8 +59,9 @@ public class Worker : BackgroundService
         return new Result(
             endpoint,
             numberOfRequests,
-            results.Select(r => r.AllOrdersSentMs).Average(),
-            results.Select(r => r.AllOrdersProcessedMs).Average());
+            results.Select(r => r.LatencyMs).Average(),
+            (long) results.Select(r => r.ThroughputPerMin).Average(),
+            (int) results.Select(r => r.NumberOfFailures).Average());
     }
 
     private async Task<Result> RunTest(string endpoint, int numberOfRequests)
@@ -78,29 +69,50 @@ public class Worker : BackgroundService
         var initialOrderCount = await GetOrderCount();
 
         var sw = Stopwatch.StartNew();
-        var tasks = Enumerable.Range(0, numberOfRequests).Select(i => SubmitOrder(endpoint, initialOrderCount + i));
+        var tasks = Enumerable.Range(0, numberOfRequests).Select(i => SubmitOrder(endpoint, initialOrderCount + i)).ToList();
         await Task.WhenAll(tasks);
-        var allOrdersSentTime = sw.ElapsedMilliseconds;
 
-        while (await GetOrderCount() - initialOrderCount < numberOfRequests)
+        // wait for all orders to be processed
+        var result = await GetOrderCount();
+        while (result - initialOrderCount < numberOfRequests)
         {
-            // wait
+            await Task.Delay(50);
+            result = await GetOrderCount();
         }
-
         var allOrdersProcessedTime = sw.ElapsedMilliseconds;
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
 
-        return new Result(endpoint, numberOfRequests, allOrdersSentTime, allOrdersProcessedTime);
+        return new Result(
+            endpoint,
+            numberOfRequests,
+            tasks.Select(t => t.Result.duration).Average(), 
+            (long) (numberOfRequests / ((double)allOrdersProcessedTime / 60_000)),
+            tasks.Select(t => t.Result.failures).Sum());
     }
 
-    private async Task SubmitOrder(string endpoint, int requestId)
+    private async Task<(int failures, long duration)> SubmitOrder(string endpoint, int requestId)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post,
-            $"https://localhost:7355/{endpoint}/{requestId}");
-        using var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
+        var sw = Stopwatch.StartNew();
+        var failures = 0;
+        var success = false;
+        while (!success)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post,
+                    $"https://localhost:7355/{endpoint}/{requestId}");
+                using var response = await _httpClient.SendAsync(request);
+                response.EnsureSuccessStatusCode();
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                failures++;
+            }
+        }
+        return (failures, sw.ElapsedMilliseconds);
     }
 
     private async Task<int> GetOrderCount()
@@ -110,13 +122,11 @@ public class Worker : BackgroundService
         return int.Parse(await response.Content.ReadAsStringAsync());
     }
 
-    private record Result(string Endpoint, int NumberOfRequests, double AllOrdersSentMs, double AllOrdersProcessedMs)
+    private record Result(string Endpoint, int NumberOfRequests, double LatencyMs, long ThroughputPerMin, int NumberOfFailures)
     {
         public override string ToString()
         {
-            var ordersSentMs = AllOrdersSentMs.ToString("N0");
-            var ordersProcessedMs = AllOrdersProcessedMs.ToString("N0");
-            return $"| {Endpoint,-20} | {NumberOfRequests,10} | {ordersSentMs,20} | {ordersProcessedMs,20} |";
+            return $"| {Endpoint,-20} | {NumberOfRequests,10} | {LatencyMs,20:N0} | {ThroughputPerMin,20:N0} | {NumberOfFailures,20} |";
         }
     }
 }
