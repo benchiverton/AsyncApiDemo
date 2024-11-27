@@ -22,11 +22,9 @@ GRAPH
 
 ### What's going on?
 
-When the Gateway API makes a remote call, state needs to be stored in memory so that the program can continue upon receipt of the response. If this remote call is not almost instant, it’s very likely this memory will be promoted from Gen0 → Gen1 → Gen2 by the garbage collector. As Gen2 is not actively cleaned up by the garbage collector, this is problematic — even if a response is received, the memory may not be cleaned up.
+When the Gateway API makes a remote call, state needs to be stored in memory to resume processing upon receipt of the response. If the call takes a long time, the associated objects may survive multiple garbage collection (GC) cycles, potentially being promoted from Gen0 (short-lived objects) to Gen1 and eventually to Gen2 (long-lived objects). Since Gen2 collections are less frequent and more expensive, memory pressure in Gen2 can degrade performance.
 
-Eventually, the garbage collector will suspend threads to clean up the Gen2 memory. As the app does not run while the garbage collector is active, the response time will start to increase.
-
-As more requests arrive, this problem is compounded—response times increase, causing memory to be promoted to Gen2 faster. This results in the garbage collector suspending threads to clean up Gen2 memory more regularly, further increasing response times, increasing Gen2 memory, and so on. This feedback loop causes throughput to decrease as the load increases.
+Under high load, frequent promotions to Gen2 can trigger full GC cycles more often. During these cycles, the garbage collector suspends application threads to clean up memory, causing response times to increase. This feedback loop—longer response times causing more memory promotions—leads to increased GC activity and degraded throughput as the load increases.
 
 ## One (of many) solutions
 
