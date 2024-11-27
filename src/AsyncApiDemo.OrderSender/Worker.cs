@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 
@@ -33,10 +34,10 @@ public class Worker : BackgroundService
             await RunTests(AsyncEndpoint, 500, 3),
             await RunTests(SyncEndpoint, 1000, 3),
             await RunTests(AsyncEndpoint, 1000, 3),
-            await RunTests(SyncEndpoint, 2000, 3),
+            await RunTests(SyncEndpoint, 2000, 3), 
             await RunTests(AsyncEndpoint, 2000, 3),
-            await RunTests(SyncEndpoint, 5000, 3),
-            await RunTests(AsyncEndpoint, 5000, 3)
+            await RunTests(SyncEndpoint, 3000, 3),
+            await RunTests(AsyncEndpoint, 3000, 3)
         ];
 
         var resultsLog = new StringBuilder();
@@ -72,11 +73,19 @@ public class Worker : BackgroundService
             numberOfRequests);
 
         var initialOrderCount = await GetOrderCount();
-
+        var requests = Enumerable.Range(0, numberOfRequests);
+        var requestResults = new ConcurrentBag<(int failures, long duration)>();
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = 1000
+        };
+        
         var sw = Stopwatch.StartNew();
-        var tasks = Enumerable.Range(0, numberOfRequests).Select(i => SubmitOrder(endpoint, initialOrderCount + i))
-            .ToList();
-        await Task.WhenAll(tasks);
+        await Parallel.ForEachAsync(requests, parallelOptions,  async (i, token) =>
+        {
+            var result = await SubmitOrder(endpoint, initialOrderCount + i);
+            requestResults.Add(result);
+        });
 
         // wait for all orders to be processed
         var result = await GetOrderCount();
@@ -94,9 +103,9 @@ public class Worker : BackgroundService
         return new Result(
             endpoint,
             numberOfRequests,
-            tasks.Select(t => t.Result.duration).Average(),
+            requestResults.Select(t => t.duration).Average(),
             (long)(numberOfRequests / ((double)allOrdersProcessedTime / 60_000)),
-            tasks.Select(t => t.Result.failures).Sum());
+            requestResults.Select(t => t.failures).Sum());
     }
 
     private async Task<(int failures, long duration)> SubmitOrder(string endpoint, int requestId)

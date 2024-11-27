@@ -1,4 +1,4 @@
-# [WIP] Asynchronous messaging in synchronous API's
+# Asynchronous messaging in synchronous APIs
 
 ## The problem
 
@@ -14,11 +14,15 @@ flowchart TD
 
 As performance testing starts, the results look promising. It seems the API meets the throughput requirements.
 
-GRAPH
+![](images/graph-sync-beginning.png)
 
 However, as the load continues to increase, something unexpected happens - beyond a certain point, throughput **decreases**!
 
-GRAPH
+![](images/graph-sync-all.png)
+
+Upon further debugging, the IDE highlighted that the piece of code making the synchronous 'SendOrder' request to the backend API is allocating a significant amount of memory on the small object heap.
+
+![](images/soh-allocation.png)
 
 ### What's going on?
 
@@ -49,7 +53,9 @@ flowchart TD
 * [Async endpoint](https://github.com/benchiverton/AsyncApiDemo/blob/main/src/AsyncApiDemo.GatewayApi/Program.cs#L67)
 * [Message consumer](https://github.com/benchiverton/AsyncApiDemo/tree/main/src/AsyncApiDemo.GatewayApi/SubmitOrderRequestConsumer.cs)
 
-RESULTS / IMPROVEMENTS
+With this implementation, throughput does not degrade as load increases. Instead, throughput rises with load until it reaches a maximum, beyond which it remains constant. This maximum represents the highest throughput your message consumer can support and can be increased by running more consumers in parallel.
+
+![](images/graph-all.png)
 
 ### Limitations
 * If the Backend API performs pre-processing (such as validation), you’ll need to implement error states within your domain model so that clients can query failed orders.
@@ -57,5 +63,29 @@ RESULTS / IMPROVEMENTS
 
 ## Appendix
 
+Testing parameters:
+* Order sender MaxDegreeOfParallelism = 1000 (i.e. at most 1000 concurrent SubmitOrder requests)
+* Backend API processes requests for 50ms (mocked using Task.Delay(50))
+* All apps run on one machine - this could be improved in the future
+
 ### Raw test results
 
+
+| Endpoint             | Requests   | Average latency (ms) | Throughput (/min)    | Average failures     |
+| -- | -- | -- | -- | -- |
+| submitordersync      |         10 |                  131 |                7,974 |                    0 |
+| submitorderasync     |         10 |                   24 |                8,437 |                    0 |
+| submitordersync      |         50 |                  355 |               11,998 |                    0 |
+| submitorderasync     |         50 |                    3 |               14,172 |                    0 |
+| submitordersync      |        100 |                  815 |                7,046 |                    0 |
+| submitorderasync     |        100 |                    3 |               15,773 |                    0 |
+| submitordersync      |        200 |                3,244 |                3,733 |                    0 |
+| submitorderasync     |        200 |                    7 |               16,976 |                    0 |
+| submitordersync      |        500 |                8,073 |                3,342 |                    0 |
+| submitorderasync     |        500 |                   16 |               17,985 |                    0 |
+| submitordersync      |       1000 |               18,833 |                3,083 |                  197 |
+| submitorderasync     |       1000 |                   25 |               17,535 |                    0 |
+| submitordersync      |       2000 |               22,289 |                2,834 |                 3903 |
+| submitorderasync     |       2000 |                1,068 |               18,118 |                    0 |
+| submitordersync      |       3000 |               20,745 |                3,264 |                 1568 |
+| submitorderasync     |       3000 |                  100 |               17,047 |                    0 |

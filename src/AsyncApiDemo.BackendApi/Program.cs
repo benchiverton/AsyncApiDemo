@@ -26,7 +26,7 @@ if (app.Environment.IsDevelopment())
 app.MapPost("/sendorder/{orderNumber:int}", (int orderNumber, OrderCounter orderCounter) =>
     {
         var orderId = Guid.CreateVersion7();
-        Task.Delay(500).Wait(); // do something
+        Task.Delay(50).Wait(); // do something
         orderCounter.Increment();
         
         return Results.Ok(orderId);
