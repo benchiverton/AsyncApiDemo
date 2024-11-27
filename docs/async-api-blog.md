@@ -48,12 +48,10 @@ flowchart TD
 
 ### Example
 
-[Async endpoint](../src/AsyncApiDemo.GatewayApi/Program.cs#67)
-[Message consumer](../src/AsyncApiDemo.GatewayApi/SubmitOrderRequestConsumer.cs)
+* [Async endpoint](https://github.com/benchiverton/AsyncApiDemo/blob/main/src/AsyncApiDemo.GatewayApi/Program.cs#L67)
+* [Message consumer](https://github.com/benchiverton/AsyncApiDemo/tree/main/src/AsyncApiDemo.GatewayApi/SubmitOrderRequestConsumer.cs)
 
-RESULTS
-
-DIAGRAM
+RESULTS / IMPROVEMENTS
 
 ### Limitations
 * If the Backend API performs pre-processing (such as validation), you’ll need to implement error states within your domain model so that clients can query failed orders.
