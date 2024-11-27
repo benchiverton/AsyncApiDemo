@@ -38,13 +38,15 @@ public class Worker : BackgroundService
             await RunTests(SyncEndpoint, 5000, 3),
             await RunTests(AsyncEndpoint, 5000, 3)
         ];
-        
+
         var resultsLog = new StringBuilder();
-        resultsLog.AppendLine($"| {"Endpoint",-20} | {"Requests",-10} | {"Average latency (ms)",-20} | {"Throughput (/min)",-20} | {"Average failures",-20} |");
+        resultsLog.AppendLine(
+            $"| {"Endpoint",-20} | {"Requests",-10} | {"Average latency (ms)",-20} | {"Throughput (/min)",-20} | {"Average failures",-20} |");
         foreach (var result in results)
         {
             resultsLog.AppendLine(result.ToString());
         }
+
         _logger.LogInformation(resultsLog.ToString());
     }
 
@@ -60,16 +62,20 @@ public class Worker : BackgroundService
             endpoint,
             numberOfRequests,
             results.Select(r => r.LatencyMs).Average(),
-            (long) results.Select(r => r.ThroughputPerMin).Average(),
-            (int) results.Select(r => r.NumberOfFailures).Average());
+            (long)results.Select(r => r.ThroughputPerMin).Average(),
+            (int)results.Select(r => r.NumberOfFailures).Average());
     }
 
     private async Task<Result> RunTest(string endpoint, int numberOfRequests)
     {
+        _logger.LogInformation("Starting test. Endpoint: {endpoint}, #Requests: {numberOfRequests}", endpoint,
+            numberOfRequests);
+
         var initialOrderCount = await GetOrderCount();
 
         var sw = Stopwatch.StartNew();
-        var tasks = Enumerable.Range(0, numberOfRequests).Select(i => SubmitOrder(endpoint, initialOrderCount + i)).ToList();
+        var tasks = Enumerable.Range(0, numberOfRequests).Select(i => SubmitOrder(endpoint, initialOrderCount + i))
+            .ToList();
         await Task.WhenAll(tasks);
 
         // wait for all orders to be processed
@@ -79,6 +85,7 @@ public class Worker : BackgroundService
             await Task.Delay(50);
             result = await GetOrderCount();
         }
+
         var allOrdersProcessedTime = sw.ElapsedMilliseconds;
 
         GC.Collect();
@@ -87,8 +94,8 @@ public class Worker : BackgroundService
         return new Result(
             endpoint,
             numberOfRequests,
-            tasks.Select(t => t.Result.duration).Average(), 
-            (long) (numberOfRequests / ((double)allOrdersProcessedTime / 60_000)),
+            tasks.Select(t => t.Result.duration).Average(),
+            (long)(numberOfRequests / ((double)allOrdersProcessedTime / 60_000)),
             tasks.Select(t => t.Result.failures).Sum());
     }
 
@@ -112,6 +119,7 @@ public class Worker : BackgroundService
                 failures++;
             }
         }
+
         return (failures, sw.ElapsedMilliseconds);
     }
 
@@ -122,11 +130,17 @@ public class Worker : BackgroundService
         return int.Parse(await response.Content.ReadAsStringAsync());
     }
 
-    private record Result(string Endpoint, int NumberOfRequests, double LatencyMs, long ThroughputPerMin, int NumberOfFailures)
+    private record Result(
+        string Endpoint,
+        int NumberOfRequests,
+        double LatencyMs,
+        long ThroughputPerMin,
+        int NumberOfFailures)
     {
         public override string ToString()
         {
-            return $"| {Endpoint,-20} | {NumberOfRequests,10} | {LatencyMs,20:N0} | {ThroughputPerMin,20:N0} | {NumberOfFailures,20} |";
+            return
+                $"| {Endpoint,-20} | {NumberOfRequests,10} | {LatencyMs,20:N0} | {ThroughputPerMin,20:N0} | {NumberOfFailures,20} |";
         }
     }
 }
